@@ -8,15 +8,10 @@ These instructions will install the system in your local machine.
 
 ### Prerequsites
 
-1. Clone the repository, or download source code
+1. Clone the repository
 
     ```
     $ git clone https://github.com/juanmbellini/haskell53.git
-    ```
-    or
-
-    ```
-    $ wget https://github.com/juanmbellini/haskell53/archive/master.zip
     ```
 
 2. Install Stack if you haven't yet
@@ -33,7 +28,7 @@ These instructions will install the system in your local machine.
 To build the project, execute the following commands.
 
 ```
-$ cd <project-root>
+$ cd haskell53 # Or project root's directory
 $ stack setup
 $ stack build
 ```
@@ -42,6 +37,11 @@ $ stack build
 
 ### Run
 
+To run the project, execute the following command (after building, previous section)
+
+```
+$ stack exec haskell53-exe
+```
 
 ## Author
 
