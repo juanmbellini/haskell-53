@@ -1,6 +1,7 @@
 module Main where
 
-import Lib
+import UdpServer
 
 main :: IO ()
-main = someFunc
+main = do
+    startServer "0.0.0.0" "7000" (\req -> do return (Just req))
