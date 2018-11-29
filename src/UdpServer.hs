@@ -1,18 +1,20 @@
 module UdpServer
-    ( startServer
+    ( startUdpServer
+    , Request
+    , Response
     ) where
 
 import qualified Data.ByteString.Char8 as B
-import Network.Socket hiding        (recv, recvFrom, sendAll, sendAllTo)
-import Network.Socket.ByteString    (recv, recvFrom, sendAll, sendAllTo)
+import Network.Socket hiding        (recv, recvFrom)
+import Network.Socket.ByteString    (recvFrom, sendAllTo)
 import Control.Monad                (forever)
 
 type Request = B.ByteString
 type Response = B.ByteString
 
 
-startServer :: HostName -> ServiceName -> (Request -> IO (Maybe Response)) -> IO ()
-startServer address port handler = do
+startUdpServer :: HostName -> ServiceName -> (Request -> IO (Maybe Response)) -> IO ()
+startUdpServer address port handler = do
     runUDPServer address port handler
 
 
@@ -32,5 +34,5 @@ mainLoop sock handler = do
         resp <- handler $ s                                         -- Handle the request, obtaining the response
         -- TODO: should we fork for this?
         respond resp addr                                           -- Respond in case the handler returned a response
-        where   respond (Just r) a = sendAllTo sock r a
-                respond Nothing a = return ()
+        where   respond (Just r) a  = sendAllTo sock r a
+                respond Nothing _   = return ()

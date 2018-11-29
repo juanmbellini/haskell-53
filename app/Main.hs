@@ -1,7 +1,7 @@
 module Main where
 
-import UdpServer
+import DnsServer
 
 main :: IO ()
 main = do
-    startServer "0.0.0.0" "7000" (\req -> do return (Just req))
+    startDnsServer "0.0.0.0" "7000"

@@ -1,6 +1,6 @@
 module Lib
-    ( someFunc
+    ( toIOJust
     ) where
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+toIOJust :: a -> IO (Maybe a)
+toIOJust = return . Just

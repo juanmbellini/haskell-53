@@ -23,6 +23,8 @@ dependencies:
 - base >= 4.7 && < 5
 - network
 - bytestring
+- dns
+- iproute
 
 library:
   source-dirs: src
