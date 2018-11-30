@@ -1,103 +1,199 @@
 module DnsServer
-    ( startDnsServer
+    ( DnsServerConfig(..)
+    , startDnsServer
     ) where
 
 import Lib
-import UdpServer
+-- import Udp
+
+-- import Udp.Server           (start)
+-- import qualified Udp.Types as Udp
+
+import qualified Udp.Server as US
+import qualified Udp.Client as UC
+import Udp.Types
+
 import Network.Socket       (HostName, ServiceName)
 import Network.DNS.Decode   (decode)
 import Network.DNS.Encode   (encode)
 import Network.DNS.Types
 import Data.IP              (toIPv4)
+import Data.Function        (on)
+import Control.Monad (when)
+
+type NameServers = [HostName]
+type ErrorHandler = DNSError -> IO ()
+type ErrorCreator = DNSMessage -> DNSMessage
 
 
-startDnsServer :: HostName -> ServiceName -> IO ()
-startDnsServer address port = do
-    startUdpServer address port handleDns
+startDnsServer :: DnsServerConfig -> IO ()
+startDnsServer config = do
+    US.startServer address port $ handleDns servers
+    where
+        address = listeningAddress config
+        port    = listeningPort config
+        servers = nameServers config
 
-handleDns :: UdpServer.Request -> IO (Maybe UdpServer.Response)
-handleDns = (=<<) encodeRequest . (=<<) handleDnsRequest . decodeRequest -- Decode binary to DNS, then handle DNS, then encode DNS to binary
+handleDns :: NameServers -> UdpMessage -> IO (Maybe UdpMessage)
+handleDns servers = (=<<) encodeResponse . (=<<) (handleDnsRequest servers) . decodeRequest -- Decode binary to DNS, then handle DNS, then encode DNS to binary
 
 
 -- ================================================================================================
--- Decoding
+-- Encoding / Decoding
 -- ================================================================================================
 
-decodeRequest :: UdpServer.Request -> IO (Maybe DNSMessage)
-decodeRequest req = do
+encodeResponse :: Maybe DNSMessage -> IO (Maybe UdpMessage)
+encodeResponse dnsResp = do
+    maybe
+        (return Nothing)    -- If not present, return IO Nothing
+        (toIOJust . encode) -- If present, encode DNSMessage into binary, then wrap into an IO (Just UdpMessage)
+        dnsResp
+
+decodeRequest :: UdpMessage -> IO (Maybe DNSMessage)
+decodeRequest = flip decodeUdpMessage (\_ -> putStrLn "An unknown request message was received.")
+
+decodeResponse :: UdpMessage -> IO (Maybe DNSMessage)
+decodeResponse = flip decodeUdpMessage (\_ -> putStrLn "An unknown response message was received.")
+
+decodeUdpMessage :: UdpMessage -> ErrorHandler -> IO (Maybe DNSMessage)
+decodeUdpMessage msg errorHandler = do
     either
-        (\_ -> (putStrLn "An unknown message was received." >>= \_ -> return Nothing))  -- Log and do nothing if cannot decode
-        toIOJust                                                                        -- Wrap the DNSMessage into an IO (Just DNSMessage)
-        (decode req)                                                                    -- Decode the binary request (this happens first)
+        ((=<<) (\_ -> return Nothing) . errorHandler)   -- Handle error and return Nothing
+        toIOJust                                        -- Wrap the DNSMessage into an IO (Just DNSMessage)
+        (decode msg)                                    -- Decode the binary request (this happens first)
 
 
 -- ================================================================================================
 -- Handling
 -- ================================================================================================
 
-handleDnsRequest :: Maybe DNSMessage -> IO (Maybe DNSMessage)
-handleDnsRequest dnsReq = do
+handleDnsRequest :: NameServers -> Maybe DNSMessage -> IO (Maybe DNSMessage)
+handleDnsRequest servers dnsReq = do
     maybe 
-        (return Nothing)                            -- If not present, return IO Nothing
-        ((=<<) toIOJust . handleDnsQueryMessage)    -- If present, handle the dns query, then wrap into an IO (Just DNSMessage)
+        (return Nothing)                                    -- If not present, return IO Nothing
+        ((=<<) toIOJust . handleDnsQueryMessage servers)    -- If present, handle the dns query, then wrap into an IO (Just DNSMessage)
         dnsReq
 
-handleDnsQueryMessage :: DNSMessage -> IO DNSMessage
-handleDnsQueryMessage queryMessage = do
+
+analyzeForErrors :: DNSMessage -> IO (Maybe ErrorCreator)
+analyzeForErrors msg = do
+    let queryHeader = header msg
+        queryIdentifier = identifier queryHeader
+        queryFlags = flags queryHeader
+        qr = qOrR queryFlags
+        oc = opcode queryFlags
+    if validQR qr
+        then if validOpcde oc
+            then return Nothing
+            else return (Just createNotImplementedError)
+        else return (Just createFormatError)
+    where
+        validQR :: QorR -> Bool
+        validQR = (==) QR_Query
+
+        validOpcde :: OPCODE -> Bool
+        validOpcde = flip elem [OP_STD] -- As a list because in the future more opcodes can be supported
+
+
+handleDnsQueryMessage :: NameServers -> DNSMessage -> IO DNSMessage
+handleDnsQueryMessage servers queryMessage = do
     putStrLn "A DNS message was received"
-    let queryHeader = header queryMessage
-    let queryIdentifier = identifier queryHeader
-    let queryFlags = flags queryHeader
-    -- TODO: discard if QR is QR_Response
-    let queryQuestion = head . question $ queryMessage
+    errorCreator <- analyzeForErrors queryMessage
+    maybe handleQuery sendError errorCreator
+    where
+        sendError :: ErrorCreator -> IO DNSMessage
+        sendError = flip returnError queryMessage
 
-    -- let responseHeader
-    let dnsResponose = DNSMessage {
-        header = DNSHeader {
-            identifier = queryIdentifier,
-            flags = DNSFlags {
-                qOrR            = QR_Response,
-                opcode          = opcode queryFlags,
-                authAnswer      = False,
-                trunCation      = False,
-                recDesired      = recDesired queryFlags,
-                recAvailable    = False,
-                rcode           = NoErr,
-                authenData      = True
-            }
-        },
-        question = [queryQuestion], -- TODO: check if copy
-
-        answer = [
-            ResourceRecord {
-                rrname  = qname queryQuestion,
-                rrtype  = A,
-                rrclass = classIN,
-                rrttl   = 300,
-                rdata   = RD_A . toIPv4 $ [8, 8, 8, 8]
-            },
-            ResourceRecord {
-                rrname  = qname queryQuestion,
-                rrtype  = A,
-                rrclass = classIN,
-                rrttl   = 300,
-                rdata   = RD_A . toIPv4 $ [8, 8, 4, 4]
-            }
-        ],
-        authority = [],
-        additional = []
-    }
-    -- TODO: query database for record
-    return dnsResponose
+        handleQuery :: IO DNSMessage
+        handleQuery =
+            -- First check if it is a managed zone
+            -- If yes, return the answer according the information
+            -- If not, then
+            --      Check cache
+            --      If data available and not expired in cache, then return
+            --      If data not present or expired, then forward or recurse
+            forwardRequest queryMessage servers -- TODO: check forward or recurse
+            -- TODO: cache result (add if not present, update if expired)
 
 
--- ================================================================================================
--- Encoding
--- ================================================================================================
-
-encodeRequest :: Maybe DNSMessage -> IO (Maybe UdpServer.Response)
-encodeRequest dnsResp = do
+forwardRequest :: DNSMessage -> NameServers -> IO DNSMessage
+forwardRequest dnsReq servers = do
+    resp <- UC.sendAndReceive (head servers) "53" 100000 $ encode dnsReq -- TODO: retry? use another name server?
     maybe
-        (return Nothing)    -- If not present, return IO Nothing
-        (toIOJust . encode) -- If present, encode DNSMessage into binary, then wrap into an IO (Just DNSMessage)
-        dnsResp
+        sendError           -- In case of not getting a response from nameservers, return server error
+        handleUdpMessage    -- If response was received, handle it.
+        resp
+    where
+        sendError :: IO DNSMessage
+        sendError = returnError createServerError dnsReq            -- Create the server error from the query
+
+        identifierVerification :: DNSMessage -> IO DNSMessage
+        identifierVerification resp = do
+            if sameIdentifier dnsReq resp                           -- Check if the identifier is the same
+                then return resp                                    -- Return response if yes
+                else sendError                                      -- Return error if not
+
+        handleDnsMessage :: Maybe DNSMessage -> IO DNSMessage
+        handleDnsMessage = maybe sendError identifierVerification   -- If DNSMessage, then perform identifier verification. Else send error
+
+        handleUdpMessage :: UdpMessage -> IO DNSMessage
+        handleUdpMessage = (=<<) handleDnsMessage . decodeResponse  -- Decode the UdpMessage and try to handle it as DNS
+
+
+
+-- ================================================================================================
+-- Helpers
+-- ================================================================================================
+
+createFormatError :: ErrorCreator
+createFormatError = createError FormatErr
+
+createServerError :: ErrorCreator
+createServerError = createError ServFail
+
+createNotImplementedError :: ErrorCreator
+createNotImplementedError = createError NotImpl
+
+
+createError :: RCODE -> ErrorCreator
+createError rcode queryMessage = DNSMessage {
+    header      = responseHeader,
+    question    = question queryMessage,
+    answer      = [],
+    authority   = [],
+    additional  = []
+} where
+    queryHeader     = header queryMessage
+    queryFlags      = flags queryHeader
+    responseFlags   = DNSFlags {
+        qOrR            = QR_Response,
+        opcode          = opcode queryFlags,
+        authAnswer      = False,
+        trunCation      = False,
+        recDesired      = recDesired queryFlags,
+        recAvailable    = False,
+        rcode           = rcode,
+        authenData      = True
+    }
+    responseHeader  = DNSHeader {
+        identifier  = identifier queryHeader,
+        flags       = responseFlags
+    }
+
+returnError :: ErrorCreator -> DNSMessage -> IO DNSMessage
+returnError ec = return . ec
+
+sameIdentifier :: DNSMessage -> DNSMessage -> Bool
+sameIdentifier = on (==) $ identifier . header
+
+
+-- ================================================================================================
+-- Configuration
+-- ================================================================================================
+
+data DnsServerConfig =
+    DnsServerConfig {
+        listeningAddress    :: HostName,
+        listeningPort       :: ServiceName,
+        nameServers         :: NameServers
+    }
