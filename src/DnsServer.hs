@@ -17,9 +17,8 @@ import Network.Socket       (HostName, ServiceName)
 import Network.DNS.Decode   (decode)
 import Network.DNS.Encode   (encode)
 import Network.DNS.Types
-import Data.IP              (toIPv4)
+-- import Data.IP              (toIPv4)
 import Data.Function        (on)
-import Control.Monad (when)
 
 type NameServers = [HostName]
 type ErrorHandler = DNSError -> IO ()
@@ -78,7 +77,6 @@ handleDnsRequest servers dnsReq = do
 analyzeForErrors :: DNSMessage -> IO (Maybe ErrorCreator)
 analyzeForErrors msg = do
     let queryHeader = header msg
-        queryIdentifier = identifier queryHeader
         queryFlags = flags queryHeader
         qr = qOrR queryFlags
         oc = opcode queryFlags
@@ -156,7 +154,7 @@ createNotImplementedError = createError NotImpl
 
 
 createError :: RCODE -> ErrorCreator
-createError rcode queryMessage = DNSMessage {
+createError rc queryMessage = DNSMessage {
     header      = responseHeader,
     question    = question queryMessage,
     answer      = [],
@@ -172,7 +170,7 @@ createError rcode queryMessage = DNSMessage {
         trunCation      = False,
         recDesired      = recDesired queryFlags,
         recAvailable    = False,
-        rcode           = rcode,
+        rcode           = rc,
         authenData      = True
     }
     responseHeader  = DNSHeader {
