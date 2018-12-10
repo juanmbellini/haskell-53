@@ -1,8 +1,8 @@
 module Udp
     ( S.startServer
-    , S.Handler
     , C.sendAndReceive
     , T.UdpMessage
+    , T.Handler
     ) where
 
 import Udp.Server as S
