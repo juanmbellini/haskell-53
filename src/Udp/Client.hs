@@ -1,4 +1,6 @@
-module Udp.Client where
+module Udp.Client
+    ( sendAndReceive
+    ) where
 
 
 import Udp.Imports

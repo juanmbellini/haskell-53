@@ -1,7 +1,5 @@
 module Dns.Internal
-    ( A.mapToOwnResourceRecord
-    , A.mapToPackageResourceRecord
-    , A.mapToResourceType
+    ( module Dns.Internal.PackageAdapter
     ) where
 
-import Dns.Internal.PackageAdapter as A
+import Dns.Internal.PackageAdapter

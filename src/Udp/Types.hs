@@ -1,4 +1,7 @@
-module Udp.Types where
+module Udp.Types
+    ( UdpMessage
+    , Handler
+    ) where
 
 
 import Udp.Imports

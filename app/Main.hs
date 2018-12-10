@@ -1,8 +1,12 @@
 module Main where
 
-import DnsServer
+
+import Dns      (DnsServerConfig(..), startDnsServer)
+
+import Storage  (createInMemoryDnsCacheSystem)
 
 
+--  | The default configuration.
 defaultDnsConf :: DnsServerConfig
 defaultDnsConf = DnsServerConfig {
     listeningAddress    = "0.0.0.0",
@@ -10,6 +14,8 @@ defaultDnsConf = DnsServerConfig {
     nameServers         = ["8.8.8.8", "8.8.4.4"]
 }
 
+-- | Entry point
 main :: IO ()
 main = do
-    startDnsServer defaultDnsConf
+    cacheSystem <- createInMemoryDnsCacheSystem
+    startDnsServer defaultDnsConf cacheSystem

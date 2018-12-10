@@ -1,12 +1,15 @@
-module Dns.DnsServer where
+module Dns.DnsServer
+    ( DnsServerConfig(..)
+    , startDnsServer
+    ) where
 
 
 import Lib
 import Udp
 
-import qualified Udp.Server as US
-import qualified Udp.Client as UC
-import qualified Dns.Types  as D
+-- import qualified Udp.Server as US
+-- import qualified Udp.Client as UC
+import qualified Dns.Types as D
 
 import Dns.Imports
 import Dns.Internal
@@ -29,7 +32,7 @@ type ErrorCreator = DNSMessage -> DNSMessage
 startDnsServer :: D.DnsCacheSystem c => DnsServerConfig -> c -> IO ()
 startDnsServer config cacheSystem = do
     -- dnsCacheSystem <- initialize cacheSystem
-    US.startServer address port $ handleDns servers cacheSystem
+    startServer address port $ handleDns servers cacheSystem
     where
         address = listeningAddress config
         port    = listeningPort config
@@ -121,7 +124,7 @@ handleDnsQueryMessage servers cs queryMessage = do
             (qs, anss) <- checkCache
             -- Log cache results (this is used only to show that cache is working)
             putStrLn $ concat ["There are ", show . length $ anss, " answers in cache"]
-            putStrLn $ concat ["No cache for ", show . length $ qs, " questions"]
+            putStrLn $ concat ["Must query externally for ", show . length $ qs, " questions"]
             
             -- Resolves those questions that could not be answered with cached data.
             resolved <- if null qs
@@ -207,7 +210,6 @@ handleDnsQueryMessage servers cs queryMessage = do
         -- | Resolves the given questions.
         queryQuestion :: [Question] -> IO [ResourceRecord]
         queryQuestion qs = do
-            putStrLn "Makeing external query"
             let newReq  = DNSMessage {
                     header      = header queryMessage,      -- Copy headers from the query message.
                     question    = qs,                       -- Send the given questions.
@@ -222,7 +224,7 @@ handleDnsQueryMessage servers cs queryMessage = do
 forwardRequest :: NameServers -> DNSMessage  -> IO DNSMessage
 forwardRequest servers dnsReq = do
     -- TODO: retry? use another name server? Also, catch "Network.Socket.recvBuf: does not exist (Connection refused)"
-    resp <- UC.sendAndReceive (head servers) "53" 500000 $ encode dnsReq
+    resp <- sendAndReceive (head servers) "53" 500000 $ encode dnsReq
     maybe
         sendError           -- In case of not getting a response from nameservers, return server error
         handleUdpMessage    -- If response was received, handle it.

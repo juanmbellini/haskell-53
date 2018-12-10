@@ -1,4 +1,6 @@
-module Udp.Server where
+module Udp.Server
+    ( startServer
+    ) where
 
 
 import Control.Monad    (forever)

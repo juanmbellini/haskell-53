@@ -1,4 +1,8 @@
-module Dns.Internal.PackageAdapter where
+module Dns.Internal.PackageAdapter
+    ( mapToOwnResourceRecord
+    , mapToPackageResourceRecord
+    , mapToResourceType
+    ) where
 
 
 import Lib

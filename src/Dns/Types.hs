@@ -1,7 +1,20 @@
-module Dns.Types where
+module Dns.Types
+    ( Domain
+    , ResourceType(..)
+    , ResourceClass(..)
+    , ResourceTTL
+    , ResourceData(..)
+    , MailExchanger(..)
+    , ResourceRecord(..)
+    , Zone(..)
+    , domainToString
+    , DnsCacheSystem(..)
+    ) where
 
 
 import Dns.Imports
+
+import Data.ByteString.Char8 (unpack)
 
 
 -- ================================================================================================
@@ -89,6 +102,9 @@ data Zone =
     }
     deriving Eq
 
+-- | Transforms the given Domain (which is a ByteString alias) into a String
+domainToString :: Domain -> String
+domainToString = unpack
 
 -- ================================================================================================
 -- Cache Stuff

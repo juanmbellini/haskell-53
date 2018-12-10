@@ -1,10 +1,9 @@
 module Udp
-    ( S.startServer
-    , C.sendAndReceive
-    , T.UdpMessage
-    , T.Handler
+    ( module Udp.Server
+    , module Udp.Client
+    , module Udp.Types
     ) where
 
-import Udp.Server as S
-import Udp.Client as C
-import Udp.Types as T
+import Udp.Server
+import Udp.Client
+import Udp.Types
