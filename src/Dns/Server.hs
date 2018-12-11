@@ -6,13 +6,9 @@ module Dns.Server
 
 import Lib
 import Udp
-
--- import qualified Udp.Server as US
--- import qualified Udp.Client as UC
-import qualified Dns.Types as D
-
 import Dns.Imports
 import Dns.Internal
+import qualified Dns.Types as D
 
 import Network.Socket               (HostName, ServiceName)
 import Network.DNS.Decode           (decode)
@@ -312,5 +308,4 @@ data DnsServerConfig =
         listeningAddress    :: HostName,    -- ^ Address to which the server must bind.
         listeningPort       :: ServiceName, -- ^ Listing port for the server.
         nameServers         :: NameServers  -- ^ Nameservers to which the request can be forwarded.
-        -- cacheSystem         :: CacheSystem
     }
