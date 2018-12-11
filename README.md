@@ -28,7 +28,7 @@ These instructions will install the system in your local machine.
 To build the project, execute the following commands.
 
 ```
-$ cd haskell53 # Or project root's directory
+$ cd haskell53 # Or project's root directory
 $ stack setup
 $ stack build
 ```
