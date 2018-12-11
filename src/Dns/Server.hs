@@ -1,4 +1,4 @@
-module Dns.DnsServer
+module Dns.Server
     ( DnsServerConfig(..)
     , startDnsServer
     ) where

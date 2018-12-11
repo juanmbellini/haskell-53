@@ -1,7 +1,7 @@
 module Dns
     ( module Dns.Types
-    , module Dns.DnsServer
+    , module Dns.Server
     ) where
 
 import Dns.Types
-import Dns.DnsServer
+import Dns.Server
