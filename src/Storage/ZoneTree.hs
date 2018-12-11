@@ -40,9 +40,9 @@ searchZone zt dom t = join . fmap (flip (searchZoneRec t) zt) $ splitDomain dom
 --   The function is called recursively going forward with the next label and child (if they match).
 --   When there are no more labels, it searches the data in the actual node.
 searchZoneRec :: ResourceType -> [String] -> ZoneTree -> Maybe ResourceRecord
-searchZoneRec _ (_:_)   (ZoneTree _ _ [])   = Nothing                       -- In this case, the labels list still has elements but there are no more children nodes.
-searchZoneRec t []      (ZoneTree _ rrs _)  = getMatches rrs resourceType t -- In this case, we are in the node that might contain the data we are searching.
-searchZoneRec t (l:ls)  (ZoneTree _ _ cs)   = join . fmap (searchZoneRec t ls) $ getMatches cs label l
+searchZoneRec _ (_:_)   (ZoneTree _ _ [])   = Nothing                                                   -- Labels list still has elements but there are no more children nodes.
+searchZoneRec t []      (ZoneTree _ rrs _)  = getMatches rrs resourceType t                             -- We are in the node that might contain the data we are searching.
+searchZoneRec t (l:ls)  (ZoneTree _ _ cs)   = join . fmap (searchZoneRec t ls) $ getMatches cs label l  -- There are labels in the list, so search recursively.
 
 
 -- ================================================================================================
@@ -106,4 +106,5 @@ getMatches :: Eq b => [a] -> (a -> b) -> b -> Maybe a
 getMatches list f v = if null matches           -- Check if there are elements that matched.
     then Nothing                                -- If there weren't then return Nothing.
     else Just $ head matches                    -- Else, get the first element (which should be the only one), and wrap in Just.
-    where matches = filter ((==) v . f) list    -- Filter for elements that map to the given value (should be only one).
+    where
+        matches = filter ((==) v . f) list    -- Filter for elements that map to the given value (should be only one).
