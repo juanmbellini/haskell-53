@@ -26,6 +26,8 @@ dependencies:
 - split
 - dns
 - iproute
+- aeson
+- text
 
 library:
   source-dirs: src

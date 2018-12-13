@@ -100,7 +100,7 @@ data Zone =
         domain  :: Domain,          -- The zone domain name
         records :: [ResourceRecord] -- A list of resource records
     }
-    deriving Eq
+    deriving (Eq, Show)
 
 -- | Transforms the given Domain (which is a ByteString alias) into a String
 domainToString :: Domain -> String

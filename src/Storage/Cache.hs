@@ -24,4 +24,4 @@ instance DnsCacheSystem InMemoryDnsCacheSystem where
 
 -- | Function that initializes an InMemoryDnsCacheSystem.
 createInMemoryDnsCacheSystem :: IO (InMemoryDnsCacheSystem)
-createInMemoryDnsCacheSystem = newIORef emptyTree >>= (return . InMemoryDnsCacheSystem)
+createInMemoryDnsCacheSystem = newIORef emptyTree >>= return . InMemoryDnsCacheSystem

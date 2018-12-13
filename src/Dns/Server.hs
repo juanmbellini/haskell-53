@@ -307,5 +307,7 @@ data DnsServerConfig =
     DnsServerConfig {
         listeningAddress    :: HostName,    -- ^ Address to which the server must bind.
         listeningPort       :: ServiceName, -- ^ Listing port for the server.
-        nameServers         :: NameServers  -- ^ Nameservers to which the request can be forwarded.
-    }
+        nameServers         :: NameServers, -- ^ Nameservers to which the request can be forwarded.
+        rootServers         :: [IPv4],      -- ^ The addresses of the root servers.
+        zones               :: [D.Zone]     -- ^ The managed zones.
+    } deriving Show
