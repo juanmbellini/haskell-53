@@ -25,23 +25,23 @@ type NameServers = [HostName]
 type ErrorCreator = DNSMessage -> DNSMessage
 
 -- | Starts a DNSServer with the given configuration and cache system.
-startDnsServer :: D.DnsCacheSystem c => DnsServerConfig -> c -> IO ()
-startDnsServer config cacheSystem = do
+startDnsServer :: (D.DnsCacheSystem c, D.ZonesManager m) => DnsServerConfig -> c -> m -> IO ()
+startDnsServer config cacheSystem zonesManager = do
     -- dnsCacheSystem <- initialize cacheSystem
-    startServer address port $ handleDns servers cacheSystem
+    startServer address port $ handleDns servers cacheSystem zonesManager
     where
         address = listeningAddress config
         port    = listeningPort config
         servers = nameServers config
 
 -- | Handler function for DNSMessages.
-handleDns :: D.DnsCacheSystem c => NameServers -> c -> UdpMessage -> IO (Maybe UdpMessage)
-handleDns servers cs = (=<<) encoder . (=<<) handler . decoder -- Decode binary to DNS, then handle DNS, then encode DNS to binary
+handleDns :: (D.DnsCacheSystem c, D.ZonesManager m) => NameServers -> c -> m -> UdpMessage -> IO (Maybe UdpMessage)
+handleDns servers cs zm = (=<<) encoder . (=<<) handler . decoder -- Decode binary to DNS, then handle DNS, then encode DNS to binary
     where
         decoder :: UdpMessage -> IO (Maybe DNSMessage)
         decoder = return . decodeUdpMessage
         handler :: Maybe DNSMessage -> IO (Maybe DNSMessage)
-        handler = handleDnsRequest servers cs
+        handler = handleDnsRequest servers cs zm
         encoder :: Maybe DNSMessage -> IO (Maybe UdpMessage)
         encoder = return . encodeResponse
 
@@ -71,22 +71,25 @@ supportedOpcdes = [OP_STD]
 -- | Given the NameServers and a CacheSystem, if the given Maybe DNSMessage is present,
 --   then handle that DNSMessage. If not present, Nothing is returned.
 --   Note that the DNSMessage must be a valid query.
-handleDnsRequest :: D.DnsCacheSystem c => NameServers -> c -> Maybe DNSMessage -> IO (Maybe DNSMessage)
-handleDnsRequest servers cs =
+handleDnsRequest :: (D.DnsCacheSystem c, D.ZonesManager m) => NameServers -> c -> m -> Maybe DNSMessage -> IO (Maybe DNSMessage)
+handleDnsRequest servers cs zm =
     maybe 
-        (return Nothing)                                    -- If not present, return IO Nothing
-        ((=<<) toIOJust . handleDnsQueryMessage servers cs) -- If present, handle the dns query, then wrap into an IO (Just DNSMessage)
+        (return Nothing)                                        -- If not present, return IO Nothing
+        ((=<<) toIOJust . handleDnsQueryMessage servers cs zm)  -- If present, handle the dns query, then wrap into an IO (Just DNSMessage)
 
 
 -- | Analyzes the given dns request message, searching for errors.
---   If checks whether the QR flag is the correct (i.e is a query and not a response).
+--   It checks whether the QR flag is the correct (i.e is a query and not a response).
 --   It also checks whether the opcode is supported.
+--   Finally, it checks whether there are questions.
 --   In case any error is detected, the corresponding error creator is returned. 
 --   Otherwise, nothing is returned.
 analyzeRequest :: DNSMessage -> Maybe ErrorCreator
 analyzeRequest msg = if validQR . qOrR $ queryFlags
     then if validOpcde . opcode $ queryFlags
-        then Nothing
+        then if hasQuestion msg
+            then Nothing
+            else Just createFormatError
         else Just createNotImplementedError
     else Just createFormatError
     where
@@ -98,122 +101,41 @@ analyzeRequest msg = if validQR . qOrR $ queryFlags
         validOpcde :: OPCODE -> Bool
         validOpcde = flip elem supportedOpcdes
 
+        hasQuestion :: DNSMessage -> Bool
+        hasQuestion = not . null . question
+
+
 -- | Given the name servers and the cache system, this function handles with them the given DNS message.
 --   It analyzes the message, acting according to the result of that analysis.
-handleDnsQueryMessage :: D.DnsCacheSystem c => NameServers -> c -> DNSMessage -> IO DNSMessage
-handleDnsQueryMessage servers cs queryMessage = do
+handleDnsQueryMessage :: (D.DnsCacheSystem c, D.ZonesManager m) => NameServers -> c -> m -> DNSMessage -> IO DNSMessage
+handleDnsQueryMessage servers cs zm queryMessage = do
     maybe handleQuery sendError $ analyzeRequest queryMessage
     where
+         
+        -- | Returns a DNSMessage according on how it is handled the recevied one.
+        handleQuery :: IO DNSMessage
+        handleQuery = do
+            let h               = header queryMessage
+                -- Only the first question in the Questions list. More than one question is not supported.
+                q               = head $ question queryMessage -- analyzeRequest checked that there are questions
+                resolverHandler = resolveQuestion cs servers h q
+                cacheHandler    = searchCache cs q >>= analyzeHandlerResult resolverHandler . handleCache h q
+            searchManaged zm q >>= analyzeHandlerResult cacheHandler . handleManaged h q
+    
+        -- | Function that handles the given SearchResult.
+        --   Returns error on SearchError, the message on Found, 
+        --   and the given IO DNSMessage on NotFound.
+        analyzeHandlerResult :: IO DNSMessage -> SearchResult -> IO DNSMessage
+        analyzeHandlerResult _               (Found msg) = return msg
+        analyzeHandlerResult notFoundHandler NotFound    = notFoundHandler
+        analyzeHandlerResult _               SearchError = sendError createFormatError
+
+
         -- | Function that takes an error creator and returns a DNSMessage.
         --   It curries the returnError function with the query message (applying a flip function).
         sendError :: ErrorCreator -> IO DNSMessage
         sendError = flip returnError queryMessage
 
-        handleQuery :: IO DNSMessage
-        handleQuery = do
-            -- First check if it is a managed zone
-            -- If yes, return the answer according the information 
-            -- TODO: missing implementation...
-            
-            -- If not, then perform the query, trying to answer with cached data first.
-            -- First, check cache, returning questions to be performed and answers that are stored.
-            (qs, anss) <- checkCache
-            -- Log cache results (this is used only to show that cache is working)
-            putStrLn $ concat ["There are ", show . length $ anss, " answers in cache"]
-            putStrLn $ concat ["Must query externally for ", show . length $ qs, " questions"]
-            
-            -- Resolves those questions that could not be answered with cached data.
-            resolved <- if null qs
-                then return ([])
-                else queryQuestion qs
-            
-            -- Stores the resolved questions in cache (if empty, nothing is done).
-            saveInCache resolved
-            
-            -- Return the response with cached and queried answers.
-            return . resolvedResponse $ resolved ++ anss
-
-        
-        -- | Checks the cache, returning a list of Questions that must be queried (no data in cache for them),
-        --   and a list of ResourceRcords that can be answered with data in cache.
-        checkCache :: IO ([Question], [ResourceRecord])
-        checkCache = do
-            res <- mapM questionAndResult $ question queryMessage
-            let notInCache = map fst $ filter (\(_, mr) -> isNothing mr) res
-                inCache     = concat . map mapToPackageResourceRecord . catMaybes . map snd $ res
-            return (notInCache, inCache)
-        
-        -- | Wraps the given question together with a Maybe ResourceRecord that answers it, taken from cache if it exists
-        questionAndResult :: Question -> IO (Question, Maybe D.ResourceRecord)
-        questionAndResult q = do
-            res <- searchCacheForQuestion q
-            return (q, res)
-        
-        -- | Searches a ResourceRecord that answers the given question.
-        --   Nothing is returned if no answers could be found for it.
-        searchCacheForQuestion :: Question -> IO (Maybe D.ResourceRecord)
-        searchCacheForQuestion q = maybe
-                                    (return Nothing)                -- If not, then return Nothing
-                                    doSearchCache       -- If yes, then look in cache
-                                    -- (D.getCache cs $ qname q)       -- If yes, then look in cache
-                                    (mapToResourceType $ qtype q)   -- Check if we support the question type
-                                        -- TODO: when empty, search for a CNAME instead
-            where
-                doSearchCache :: D.ResourceType -> IO (Maybe D.ResourceRecord)
-                doSearchCache t = do
-                    partial <- D.getCache cs (qname q) t
-                    if isJust partial
-                        then return partial
-                        else case t of
-                                D.CNAME -> return Nothing
-                                _       -> return Nothing
-                                -- TODO: here we must continue searching in CNAMEs till
-                                -- TODO: a record of type t is returned. If another is returned, return nothing
-
-        
-        -- | Saves in cache the given ResourceRecords.
-        saveInCache :: [ResourceRecord] -> IO ()
-        saveInCache = mapM_ (D.saveCache cs) . mapToOwnResourceRecord
-
-        -- | Creates a response DNSMessage, sending the given ResourceRecords in the answers section.
-        resolvedResponse :: [ResourceRecord] -> DNSMessage
-        resolvedResponse rrs = DNSMessage {
-                                header      = respHeader,
-                                question    = question queryMessage,
-                                answer      = rrs,
-                                authority   = [],
-                                additional  = []
-                            }
-            where
-                queryHeader     = header queryMessage
-                queryFlags      = flags queryHeader
-                responseFlags   = DNSFlags {
-                                    qOrR            = QR_Response,
-                                    opcode          = opcode queryFlags,
-                                    authAnswer      = False,
-                                    trunCation      = False,
-                                    recDesired      = recDesired queryFlags,
-                                    recAvailable    = False,
-                                    rcode           = NoErr,
-                                    authenData      = True
-                                }
-                respHeader      = DNSHeader {
-                                    identifier  = identifier queryHeader,
-                                    flags       = responseFlags
-                                }
-                        
-
-        -- | Resolves the given questions.
-        queryQuestion :: [Question] -> IO [ResourceRecord]
-        queryQuestion qs = do
-            let newReq  = DNSMessage {
-                    header      = header queryMessage,      -- Copy headers from the query message.
-                    question    = qs,                       -- Send the given questions.
-                    answer      = answer queryMessage,      -- Copy answers (should be empty though).
-                    authority   = authority queryMessage,   -- Copy authority (should be empty though).
-                    additional  = additional queryMessage   -- Copy additional (should be empty though).
-                }
-            fmap answer $ forwardRequest servers newReq     -- TODO: check forward or recurse
 
 -- | Forwards the the given DNSMessage to the given NameServers, returning the DNSMessage response.
 --   In case there is no response, a server error is returned.
@@ -251,6 +173,103 @@ forwardRequest servers dnsReq = do
 -- ================================================================================================
 -- Helpers
 -- ================================================================================================
+
+-- | A wrapper for search results.
+data SearchResult   = Found DNSMessage  -- ^ Data was found.
+                    | NotFound          -- ^ Data was not found.
+                    | SearchError       -- ^ There are errors in the search.
+
+-- | Searches the Question in the Managed Zones.
+searchManaged :: D.ZonesManager m => m -> Question -> IO D.ManagedSearchResult
+searchManaged zm q  = maybe
+                        (return D.NotManaged)           -- If not, then the desision is to return a NotManaged.
+                        (D.getData zm (qname q))        -- If yes, perform the search.
+                        (mapToResourceType $ qtype q)   -- Check if we support the question type.
+
+-- | Handles the search result when search in managed data.
+handleManaged :: DNSHeader -> Question -> D.ManagedSearchResult -> SearchResult
+handleManaged h q (D.Authority rrs) = Found . (authorityResponse h q) . concat . map mapToPackageResourceRecord $ rrs
+handleManaged h q (D.Delegated rr)  = Found . (delegatedResponse h q) . mapToPackageResourceRecord $ rr
+handleManaged h q (D.NotExists)     = Found . (authorityResponse h q) $ []
+handleManaged _ _ (D.NotManaged)    = NotFound
+handleManaged _ _ (D.QuestionError) = SearchError
+
+-- | Searches the Question in cache.
+searchCache :: D.DnsCacheSystem c => c -> Question -> IO D.CacheSearchResult
+searchCache cs q = maybe
+                    (return D.NotAvailable)         -- If no, then data is not available.
+                    (D.getCache cs (qname q))       -- If yes, perform the search.
+                    (mapToResourceType $ qtype q)   -- Check if we support the question type.
+
+-- | Handles the search result when search in cache data.
+handleCache :: DNSHeader -> Question -> D.CacheSearchResult -> SearchResult
+handleCache h q (D.InCache rrs)         = Found . (cacheResponse h q) . concat . map mapToPackageResourceRecord $ rrs
+handleCache _ _ (D.NotAvailable)        = NotFound
+handleCache _ _ (D.CacheQuestionError)  = SearchError
+
+-- | Resolves the Question externally.
+resolveQuestion :: D.DnsCacheSystem c => c -> NameServers -> DNSHeader -> Question -> IO DNSMessage
+resolveQuestion cs servers h q = do
+    let newReq  = DNSMessage {
+            header      = h,    -- Set header
+            question    = [q],  -- Send the given question.
+            answer      = [],   -- Empty answer.
+            authority   = [],   -- Empty authority.
+            additional  = []    -- Empty additional.
+        }
+    result <- forwardRequest servers newReq -- TODO: check forward or recurse
+    mapM_ (D.saveCache cs) . mapToOwnResourceRecord $ answer result -- Save all records in cache
+    return result
+
+-- | Builds a DNSHeader in response to the query that contained the given DNSHeader,
+--   setting the authAnswer and rcode flags according to the given Bool and RCODE values.
+buildResponseHeader :: DNSHeader -> Bool -> RCODE -> DNSHeader
+buildResponseHeader h auth rc = let msgId   = identifier h
+                                    fl      = flags h
+                                in DNSHeader {
+                                    identifier  = msgId,
+                                    flags       = DNSFlags {
+                                        qOrR            = QR_Response,
+                                        opcode          = opcode fl,
+                                        authAnswer      = auth,
+                                        trunCation      = False,
+                                        recDesired      = recDesired fl,
+                                        recAvailable    = False,
+                                        rcode           = rc,
+                                        authenData      = True
+                                    }
+                                }
+
+-- | Creates a response DNSMessage to report that data was found in local data
+--   (i.e we are authoritative for it).
+authorityResponse :: DNSHeader -> Question -> [ResourceRecord] -> DNSMessage
+authorityResponse h q rrs = DNSMessage {
+                        header      = buildResponseHeader h True NoErr,
+                        question    = [q],
+                        answer      = rrs,
+                        authority   = [],
+                        additional  = []
+                    }
+
+-- | Creates a response DNSMessage to report that data is delegated
+delegatedResponse :: DNSHeader -> Question -> [ResourceRecord] -> DNSMessage
+delegatedResponse h q rrs = DNSMessage {
+                        header      = buildResponseHeader h False NoErr,
+                        question    = [q],
+                        answer      = [],
+                        authority   = rrs,
+                        additional  = []
+                    }
+
+-- | Creates a response DNSMessage to report data in cache.
+cacheResponse :: DNSHeader -> Question -> [ResourceRecord] -> DNSMessage
+cacheResponse h q rrs = DNSMessage {
+                        header      = buildResponseHeader h False NoErr,
+                        question    = [q],
+                        answer      = rrs,
+                        authority   = [],
+                        additional  = []
+                    }
 
 -- | Wrapper for an ErrorCreator with the FormatErr RCODE.
 createFormatError :: ErrorCreator

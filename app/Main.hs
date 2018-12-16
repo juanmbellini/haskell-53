@@ -2,7 +2,7 @@ module Main where
 
 
 import Dns      (startDnsServer, DnsServerConfig(..), domain)
-import Storage  (createInMemoryDnsCacheSystem)
+import Storage  (createInMemoryDnsCacheSystem, createInMemoryZonesManager)
 import Config   (getConfiguration, SystemConfig(..))
 
 import Data.IP
@@ -42,5 +42,8 @@ main :: IO ()
 main = do
     systemConfig <- getConfiguration configFilePath
     reportConfigration systemConfig
+    let dnsConf = dnsConfig systemConfig
     cacheSystem <- createInMemoryDnsCacheSystem
-    startDnsServer (dnsConfig systemConfig) cacheSystem
+    zoneManager <- createInMemoryZonesManager (zones dnsConf)
+
+    startDnsServer dnsConf cacheSystem zoneManager
