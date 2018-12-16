@@ -35,13 +35,35 @@ $ stack build
 
 **Note:** The ```stack setup``` command installs an isolated copy of GHC for the project.
 
+## Usage
+
+### Standalone Run
+
+To run the project, execute the following command (after building, previous section).
+You can set where the config file is located. Note that it must be a JSON file.
+
+```
+$ cd haskell53 # Or project's root directory
+$ stack exec haskell53-exe [config-file-path.json]
+```
+
+### Install
+
+You can install the system in your computer in order to execute it without calling ```stack```.
+
+```
+$ cd haskell53 # Or project's root directory
+$ stack install
+```
+
 ### Run
 
-To run the project, execute the following command (after building, previous section)
+After installing, you can execute it like this:
 
 ```
-$ stack exec haskell53-exe
+$ haskell53-exe [config-file-path.json]
 ```
+
 
 ## Author
 
