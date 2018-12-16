@@ -25,7 +25,7 @@ data ZoneTree =
         zoneData    :: [ResourceRecord],    -- ^ The data in this zone node
         children    :: [ZoneTree]           -- ^ The children nodes (i.e children zones)
     }
-    deriving (Eq, Show)
+    deriving (Eq, Show, Read)
 
 -- | An empty zones tree (i.e to be used for initialization)
 emptyTree :: ZoneTree

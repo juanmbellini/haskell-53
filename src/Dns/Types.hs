@@ -37,11 +37,11 @@ data ResourceType   = A                 -- ^ IPv4 Address
                     | TXT               -- ^ Text string record
                     | AAAA              -- ^ IPv6 Address
                     | PTR               -- ^ A domain name pointer
-                    deriving (Eq, Ord, Show)
+                    deriving (Eq, Ord, Show, Read)
 
 -- | The resource record class
 data ResourceClass  = IN                -- Only Internet is supported
-    deriving (Eq, Show)
+    deriving (Eq, Show, Read)
 
 -- | The TTL type
 type ResourceTTL    = Word32            -- Represented as an unsigned 32-bits integer
@@ -77,7 +77,7 @@ data ResourceData   = A_Data {
                     | PTR_Data {
                         ptrdname    :: [Domain]         -- ^ A domain name that point to the same location in the domain name space.
                     }
-                    deriving (Eq, Show)
+                    deriving (Eq, Show, Read)
 
 -- | Data type for a Mail Exchanger, indicating its domain and preference
 data MailExchanger =
@@ -85,7 +85,7 @@ data MailExchanger =
         exchange    :: Domain,  -- ^ The domain name of a host that acts as a mail exchanger
         preference  :: Word16   -- ^ Specifies the preference for this exchanger. Lower values are prefered
     }
-    deriving (Eq, Show)
+    deriving (Eq, Show, Read)
 
 -- | A Resource record
 data ResourceRecord =
@@ -96,7 +96,7 @@ data ResourceRecord =
         resourceTtl     :: ResourceTTL,     -- ^ The TTL for the record
         resourceData    :: ResourceData     -- ^ The resource's data
     } 
-    deriving (Eq, Show)
+    deriving (Eq, Show, Read)
 
 -- | A zone data type
 data Zone =

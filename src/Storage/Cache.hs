@@ -6,7 +6,12 @@ module Storage.Cache
 import Storage.Imports
 import Storage.ZoneTree
 
+import Control.Concurrent       (forkIO, threadDelay)
+import Control.Monad            (forever)
+import Control.Exception.Base   (SomeException, catch)
+
 import Data.IORef
+import System.Directory
 
 import Lib
 
@@ -63,5 +68,43 @@ searchTree zt d t  =   let searchResult = searchWithoutAuthority zt (domainToStr
 
 
 -- | Function that initializes an InMemoryDnsCacheSystem.
-createInMemoryDnsCacheSystem :: IO (InMemoryDnsCacheSystem)
-createInMemoryDnsCacheSystem = newIORef emptyTree >>= return . InMemoryDnsCacheSystem
+createInMemoryDnsCacheSystem :: FilePath -> IO (InMemoryDnsCacheSystem)
+createInMemoryDnsCacheSystem fp = do
+    zoneTree    <- fmap (maybe emptyTree id) $ retrieveCache fp
+    ioRef       <- newIORef zoneTree
+    let cacheSystem = InMemoryDnsCacheSystem ioRef
+    _ <- forkIO $ persistCacheProcess cacheSystem fp
+    return cacheSystem
+
+-- | Tries to retrieve cache data from the given FilePath.
+retrieveCache :: FilePath -> IO (Maybe ZoneTree)
+retrieveCache fp = do
+    catch (fmap (Just . parseZoneTree) $ readFile fp) onErrorHandler
+    where
+        -- | Error handler to be used when retrieving cache.
+        onErrorHandler :: SomeException -> IO (Maybe a)
+        onErrorHandler _ = putStrLn "Could not parse ZoneTree" >>= \_ -> return Nothing
+
+        -- | Parses the String into a ZoneTree.
+        parseZoneTree :: String -> ZoneTree
+        parseZoneTree = read
+
+
+-- | Starts the persisting cache process.
+--   It persists the InMemoryDnsCacheSystem structure in the file with the given FilePath,
+--   every minute.
+persistCacheProcess :: InMemoryDnsCacheSystem -> FilePath -> IO ()
+persistCacheProcess cs fp = forever $ do
+    persistCache cs fp
+    let sleepTime = 60 * 1000000
+    threadDelay sleepTime
+
+-- | The action of persisting cache data.
+--   It persists the InMemoryDnsCacheSystem structure in the file with the given FilePath.
+persistCache :: InMemoryDnsCacheSystem -> FilePath -> IO ()
+persistCache cs fp = do
+    putStrLn "Persisting cache"
+    zt <- readIORef $ cache cs
+    let tempFilePath = "/tmp/tempCache.txt"
+    writeFile tempFilePath $ show zt
+    copyFile tempFilePath fp

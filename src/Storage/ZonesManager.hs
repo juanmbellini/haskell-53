@@ -25,7 +25,6 @@ instance ZonesManager InMemoryZonesManager where
     -- getData     :: a -> Domain -> ResourceType -> IO (Maybe ResourceRecord)
     getData cs dom t = do
         zt <- readIORef $ zonesData cs
-        putStrLn $ show zt
         return $ searchTree zt dom t
 
 -- | Function that performs all the search mechanism in the tree.
@@ -70,12 +69,6 @@ searchTree zt d t   =   let searchResult = searchWithAuthority zt (domainToStrin
 --   (i.e this server will be authoritative for these Zones).
 createInMemoryZonesManager :: [Zone] -> IO (InMemoryZonesManager)
 createInMemoryZonesManager = fmap InMemoryZonesManager . newIORef . addZones emptyTree
--- createInMemoryZonesManager zs = do
---     let zt = addZones emptyTree zs
---     putStrLn $ show zt
-    
---     ioRef   <- newIORef zt
---     return $ InMemoryZonesManager ioRef
 
 
 -- | Creates a new ZoneTree based on the given ZoneTree,

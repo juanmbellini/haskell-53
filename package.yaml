@@ -28,6 +28,7 @@ dependencies:
 - iproute
 - aeson
 - text
+- directory
 
 library:
   source-dirs: src

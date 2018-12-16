@@ -42,8 +42,9 @@ main :: IO ()
 main = do
     systemConfig <- getConfiguration configFilePath
     reportConfigration systemConfig
-    let dnsConf = dnsConfig systemConfig
-    cacheSystem <- createInMemoryDnsCacheSystem
+    let dnsConf     = dnsConfig systemConfig
+    let cacheFIle   = cacheDataFilePath systemConfig
+    cacheSystem <- createInMemoryDnsCacheSystem cacheFIle
     zoneManager <- createInMemoryZonesManager (zones dnsConf)
 
     startDnsServer dnsConf cacheSystem zoneManager
