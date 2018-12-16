@@ -1,17 +1,20 @@
 module Main where
 
 
-import Dns      (startDnsServer, DnsServerConfig(..), domain)
-import Storage  (createInMemoryDnsCacheSystem, createInMemoryZonesManager)
-import Config   (getConfiguration, SystemConfig(..))
+import Dns                  (startDnsServer, DnsServerConfig(..), domain)
+import Storage              (createInMemoryDnsCacheSystem, createInMemoryZonesManager)
+import Config               (getConfiguration, SystemConfig(..))
 
 import Data.IP
+import Data.Maybe           (listToMaybe)
+
+import System.Environment   (getArgs)
 
 
 -- | Default config file
 --   TODO: SHOULD WE KEEP THIS?
-configFilePath :: FilePath
-configFilePath = "/Users/jbellini/Desktop/exampleConfigFile.json"
+defaultConfigFilePath :: FilePath
+defaultConfigFilePath = "/usr/local/var/haskell53-conf.json"
 
 -- | Reports the given configuration
 --   (used for giving INFO logging about how the system is operating).
@@ -40,7 +43,8 @@ separateElements (c:cs)     = c:separateElements cs
 -- | Entry point
 main :: IO ()
 main = do
-    systemConfig <- getConfiguration configFilePath
+    configFilePathArg <- fmap (maybe defaultConfigFilePath id . listToMaybe) getArgs
+    systemConfig <- getConfiguration configFilePathArg
     reportConfigration systemConfig
     let dnsConf     = dnsConfig systemConfig
     let cacheFIle   = cacheDataFilePath systemConfig

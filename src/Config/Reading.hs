@@ -8,6 +8,7 @@ import Config.SystemConfig  (SystemConfig(..))
 import Config.Internal.Json
 
 import Data.Maybe
+import Control.Exception.Base   (SomeException, catch)
 
 import qualified Data.ByteString.Lazy.Char8 as L (readFile)
 
@@ -20,13 +21,17 @@ getConfiguration :: FilePath -> IO (SystemConfig)
 -- getConfiguration = (=<<) (return . fromMaybe defaultConfig . parseSystemConfig) . C.readFile
 getConfiguration fp = do
     putStrLn ("Parsing file " ++ fp)
-    conf <- fmap parseSystemConfig (L.readFile fp)
+    -- conf <- fmap parseSystemConfig (L.readFile fp)
+    conf <- catch (fmap parseSystemConfig $ L.readFile fp) onErrorHandler
     let message = case conf of
                     Nothing -> "Could not parse config file. Using default."
                     Just _  -> "Parsed config file successfully."
     putStrLn message
     return . fromMaybe defaultConfig $ conf
-
+    where
+        -- | Error handler to be used when retrieving cache.
+        onErrorHandler :: SomeException -> IO (Maybe a)
+        onErrorHandler _ = putStrLn "Could not config file" >>= \_ -> return Nothing
 
 -- ================================================================================================
 -- Default Configuration
@@ -36,7 +41,7 @@ getConfiguration fp = do
 defaultConfig :: SystemConfig
 defaultConfig =
     SystemConfig {
-        cacheDataFilePath   = "/tmp/haskell53/cache",
+        cacheDataFilePath   = "/tmp/haskell53/cache.txt",
         dnsConfig           = defaultDnsConf
     }
 

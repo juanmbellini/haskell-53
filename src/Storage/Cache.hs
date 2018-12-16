@@ -13,6 +13,8 @@ import Control.Exception.Base   (SomeException, catch)
 import Data.IORef
 import System.Directory
 
+import Data.List.Split
+
 import Lib
 
 
@@ -94,10 +96,12 @@ retrieveCache fp = do
 --   It persists the InMemoryDnsCacheSystem structure in the file with the given FilePath,
 --   every minute.
 persistCacheProcess :: InMemoryDnsCacheSystem -> FilePath -> IO ()
-persistCacheProcess cs fp = forever $ do
-    persistCache cs fp
-    let sleepTime = 60 * 1000000
-    threadDelay sleepTime
+persistCacheProcess cs fp = do
+    createDir fp            -- First, create directory if it not exists
+    forever $ do
+        persistCache cs fp
+        let sleepTime = 60 * 1000000
+        threadDelay sleepTime
 
 -- | The action of persisting cache data.
 --   It persists the InMemoryDnsCacheSystem structure in the file with the given FilePath.
@@ -105,6 +109,13 @@ persistCache :: InMemoryDnsCacheSystem -> FilePath -> IO ()
 persistCache cs fp = do
     putStrLn "Persisting cache"
     zt <- readIORef $ cache cs
-    let tempFilePath = "/tmp/tempCache.txt"
+    let tempFilePath = "/tmp/haskell53/tempCache.txt"
+    createDir tempFilePath
     writeFile tempFilePath $ show zt
     copyFile tempFilePath fp
+
+
+createDir :: FilePath -> IO ()
+createDir fp = do
+    let parentDirectory = foldl1 (\l s -> l ++ '/':s) . init . splitOn "/" $ fp
+    createDirectoryIfMissing True parentDirectory
