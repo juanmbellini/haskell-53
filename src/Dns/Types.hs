@@ -119,11 +119,11 @@ stringToDomain = pack
 -- ================================================================================================
 
 -- | Data type for the possible return values of the search algorithm.
-data ManagedSearchResult    = Authority { authRecords   :: [ResourceRecord] }   -- ^ The whole domain is matched.               (OPCODE 0)
-                            | Delegated { nsRecord      :: ResourceRecord   }   -- ^ The nearest Zone contains an NS record.    (OPCODE 0)
-                            | QuestionError                                     -- ^ The queried domain is not well formatted.  (OPCODE 1)
-                            | NotExists { soaRecord     :: ResourceRecord   }   -- ^ No match with the nearest Zone.            (OPCODE 3)
-                            | NotManaged                                        -- ^ No nearest ancestor Zone.                  (OPCODE 5)
+data ManagedSearchResult    = Authority { authRecords   :: [ResourceRecord] }   -- ^ The whole domain is matched.               (RCODE 0)
+                            | Delegated { nsRecord      :: ResourceRecord   }   -- ^ The nearest Zone contains an NS record.    (RCODE 0)
+                            | QuestionError                                     -- ^ The queried domain is not well formatted.  (RCODE 1)
+                            | NotExists { soaRecord     :: ResourceRecord   }   -- ^ No match with the nearest Zone.            (RCODE 3)
+                            | NotManaged                                        -- ^ No nearest ancestor Zone.                  (RCODE 5)
 
 -- | A type class for types that can behave as a Zones Manager.
 --   It must be able to retrieve DNS records.
