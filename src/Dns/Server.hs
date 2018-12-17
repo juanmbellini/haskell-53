@@ -190,7 +190,7 @@ searchManaged zm q  = maybe
 handleManaged :: DNSHeader -> Question -> D.ManagedSearchResult -> SearchResult
 handleManaged h q (D.Authority rrs) = Found . (authorityResponse h q) . concat . map mapToPackageResourceRecord $ rrs
 handleManaged h q (D.Delegated rr)  = Found . (delegatedResponse h q) . mapToPackageResourceRecord $ rr
-handleManaged h q (D.NotExists)     = Found . (authorityResponse h q) $ []
+handleManaged h q (D.NotExists rr)  = Found . (notExistsResponse h q) . mapToPackageResourceRecord $ rr
 handleManaged _ _ (D.NotManaged)    = NotFound
 handleManaged _ _ (D.QuestionError) = SearchError
 
@@ -236,7 +236,7 @@ buildResponseHeader h auth rc = let msgId   = identifier h
                                         recDesired      = recDesired fl,
                                         recAvailable    = False,
                                         rcode           = rc,
-                                        authenData      = True
+                                        authenData      = False
                                     }
                                 }
 
@@ -258,6 +258,16 @@ delegatedResponse h q rrs = DNSMessage {
                         question    = [q],
                         answer      = [],
                         authority   = rrs,
+                        additional  = []
+                    }
+
+-- | Creates a response DNSMessage to report that data is delegated
+notExistsResponse :: DNSHeader -> Question -> [ResourceRecord] -> DNSMessage
+notExistsResponse h q soaRR = DNSMessage {
+                        header      = buildResponseHeader h True NoErr,
+                        question    = [q],
+                        answer      = [],
+                        authority   = soaRR,
                         additional  = []
                     }
 

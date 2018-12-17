@@ -13,7 +13,6 @@ import Storage.Imports
 
 import Data.List
 import Data.List.Split
-import Data.Maybe
 
 import Lib
 
@@ -104,6 +103,8 @@ searchWithAuthority zt dom = maybe
         analyzeResult   (NotConfirmed _)    = NotManaged
 
 
+
+
 -- | Searches in the given tree node for a child with the label
 --   that matches the head of the given labels list.
 --   Authority is taken into account to respond.
@@ -111,9 +112,9 @@ searchWithAuthority zt dom = maybe
 searchWithAuthorityRec :: ZoneTree -> [String] -> Authoritative
 
 -- | Exact match.
-searchWithAuthorityRec  (ZoneTree _ rrs _)  []      = if hasSoa rrs                     -- Check if it has SOA
-                                                then Confirmed nodeData         -- If yes, return data as is.
-                                                else NotConfirmed delegation    -- Else, if not, check delegation.
+searchWithAuthorityRec  (ZoneTree _ rrs _)  []  = if hasSoa rrs                     -- Check if it has SOA
+                                                    then Confirmed nodeData         -- If yes, return data as is.
+                                                    else NotConfirmed delegation    -- Else, if not, check delegation.
     where
         nodeData    = Authority rrs                 -- The node data (i.e is authoritative for it).
         delegation  = getDelegation nodeData rrs    -- Check if an NS record is present, returning the node data if not.
@@ -126,19 +127,17 @@ searchWithAuthorityRec  (ZoneTree _ rrs cs) (l:ls)  = maybe noResult searchChild
         --   Else, if not SOA, then we must check if an NS record is contained.
         --   If NS record exists, then we are delegating. If not, the domain is not managed.
         noResult :: Authoritative
-        noResult =  if hasSoa rrs
-                        then Confirmed NotExists
-                        else NotConfirmed $ getDelegation NotManaged rrs
+        noResult = getSoaRecord (NotConfirmed $ getDelegation NotManaged rrs) (Confirmed . NotExists) rrs
 
         -- | Searches recursively in the given ZoneTree.
         --   If the result is has authoritiy confirmed, then return as is
         --   Else, if not, we must analyze the result, together with context data.
         searchChild :: ZoneTree -> Authoritative
         searchChild child   = case searchWithAuthorityRec child ls of
-                                Confirmed      sr          -> Confirmed sr
-                                NotConfirmed   NotExists   -> error "Received non authoritative NotExists."
-                                NotConfirmed   NotManaged  -> noResult
-                                NotConfirmed   sr          -> (if hasSoa rrs then Confirmed else NotConfirmed) sr
+                                Confirmed      sr               -> Confirmed sr
+                                NotConfirmed   (NotExists _)    -> error "Received non authoritative NotExists."
+                                NotConfirmed   NotManaged       -> noResult
+                                NotConfirmed   sr               -> (if hasSoa rrs then Confirmed else NotConfirmed) sr
 
         -- | Searches for the child that matches it's label with the actual label.
         --   If no child matched, Nothing is returned. Else, Just the child is returned.
@@ -222,7 +221,10 @@ splitDomain dom = case dom of
 getDelegation :: ManagedSearchResult -> [ResourceRecord] -> ManagedSearchResult
 getDelegation sr = maybe sr Delegated . getMatches resourceType NS
 
+getSoaRecord :: a -> (ResourceRecord -> a) -> [ResourceRecord] -> a
+getSoaRecord v f rrs = maybe v f (getMatches resourceType SOA rrs)
+
 -- | Function that takes a list of ResourceRecord,
 --   and returns True if it contains a SOA record, or False otherwise.
 hasSoa :: [ResourceRecord] -> Bool
-hasSoa = isJust . getMatches resourceType NS
+hasSoa = getSoaRecord False (\_ -> True)

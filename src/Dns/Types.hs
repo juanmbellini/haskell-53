@@ -122,7 +122,7 @@ stringToDomain = pack
 data ManagedSearchResult    = Authority { authRecords   :: [ResourceRecord] }   -- ^ The whole domain is matched.               (OPCODE 0)
                             | Delegated { nsRecord      :: ResourceRecord   }   -- ^ The nearest Zone contains an NS record.    (OPCODE 0)
                             | QuestionError                                     -- ^ The queried domain is not well formatted.  (OPCODE 1)
-                            | NotExists                                         -- ^ No match with the nearest Zone.            (OPCODE 3)
+                            | NotExists { soaRecord     :: ResourceRecord   }   -- ^ No match with the nearest Zone.            (OPCODE 3)
                             | NotManaged                                        -- ^ No nearest ancestor Zone.                  (OPCODE 5)
 
 -- | A type class for types that can behave as a Zones Manager.
