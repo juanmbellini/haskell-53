@@ -18,6 +18,7 @@ import Network.DNS.Types hiding     (Domain)
 import Data.Function                (on)
 
 
+
 -- | Type alias for a list of HostName (for better reading when referring to the list of resolver name servers)
 type NameServers = [HostName]
 
@@ -140,29 +141,28 @@ handleDnsQueryMessage servers cs zm queryMessage = do
 -- | Forwards the the given DNSMessage to the given NameServers, returning the DNSMessage response.
 --   In case there is no response, a server error is returned.
 forwardRequest :: NameServers -> DNSMessage  -> IO DNSMessage
-forwardRequest servers dnsReq = do
-    -- TODO: retry? use another name server? Also, catch "Network.Socket.recvBuf: does not exist (Connection refused)"
-    resp <- sendAndReceive (head servers) "53" 500000 $ encode dnsReq
+forwardRequest [] dnsReq = returnError createServerError dnsReq -- Create the server error from the query
+forwardRequest (s:ss) dnsReq = do
+    resp <- sendAndReceive s "53" (5 * 1000000) $ encode dnsReq
     maybe
-        sendError           -- In case of not getting a response from nameservers, return server error
+        nextServer          -- In case of not getting a response from nameservers, try next server.
         handleUdpMessage    -- If response was received, handle it.
         resp
     where
-        -- | The DNSMessage with the server error to be sent 
-        --   in case the received DNSMessage does not pass the identifier verification.
-        sendError :: IO DNSMessage
-        sendError = returnError createServerError dnsReq            -- Create the server error from the query
+        -- | Restart again with next server in the list.
+        nextServer :: IO DNSMessage
+        nextServer = forwardRequest ss dnsReq
 
         -- | Verifies the given DNSMessage, testing if it has the same identifier as the sent one.
         identifierVerification :: DNSMessage -> IO DNSMessage
         identifierVerification resp = do
             if sameIdentifier dnsReq resp   -- Check if the identifier is the same
                 then return resp            -- Return response if yes
-                else sendError              -- Return error if not
+                else nextServer              -- Return error if not
 
-        -- | Handles the received DNSMessage. If Nothing is passed, a ServerError is returned. 
+        -- | Handles the received DNSMessage. If Nothing is passed, a nexServer is tried.
         handleDnsMessage :: Maybe DNSMessage -> IO DNSMessage
-        handleDnsMessage = maybe sendError identifierVerification   -- If DNSMessage, then perform identifier verification. Else send error
+        handleDnsMessage = maybe nextServer identifierVerification   -- If DNSMessage, then perform identifier verification. Else try next server.
 
         -- | Handles the received UPDMessage.
         handleUdpMessage :: UdpMessage -> IO DNSMessage
