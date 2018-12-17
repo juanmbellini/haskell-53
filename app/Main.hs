@@ -12,7 +12,6 @@ import System.Environment   (getArgs)
 
 
 -- | Default config file
---   TODO: SHOULD WE KEEP THIS?
 defaultConfigFilePath :: FilePath
 defaultConfigFilePath = "/usr/local/var/haskell53-conf.json"
 
