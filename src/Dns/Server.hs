@@ -264,7 +264,7 @@ delegatedResponse h q rrs = DNSMessage {
 -- | Creates a response DNSMessage to report that data is delegated
 notExistsResponse :: DNSHeader -> Question -> [ResourceRecord] -> DNSMessage
 notExistsResponse h q soaRR = DNSMessage {
-                        header      = buildResponseHeader h True NoErr,
+                        header      = buildResponseHeader h True NameErr,
                         question    = [q],
                         answer      = [],
                         authority   = soaRR,
